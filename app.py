@@ -1,39 +1,48 @@
+from flask import Flask, render_template, request
+import numpy as np
 import pickle
-import streamlit as st
 
-def recommend(movie):
-    index = movies[movies['Title'] == movie].index[0]
-    distances = sorted(list(enumerate(similarity[index])), reverse=True, key=lambda x: x[1])
-    recommended_movie_names = []
-    for i in distances[1:6]:
-        recommended_movie_names.append(movies.iloc[i[0]].Title)
+popular_books = pickle.load(open('./popular.pkl','rb'))
+pivot_t = pickle.load(open('./pivot_t.pkl','rb'))
+books = pickle.load(open('./books.pkl','rb'))
+similarity_scores = pickle.load(open('./ss.pkl','rb'))
 
-    return recommended_movie_names
+app = Flask(__name__)
 
-page_bg_img = '''
-<style>
-      .stApp {
-  background-image: url("https://payload.cargocollective.com/1/11/367710/13568488/MOVIECLASSICSerikweb_2500_800.jpg");
-  background-size: cover;
-}
-</style>
-'''
+@app.route('/')
+def index():
+    return render_template('index.html',
+                           book_name = list(popular_books['Book-Title'].values),
+                           author = list(popular_books['Book-Author'].values),
+                           image = list(popular_books['Image-URL-M'].values),
+                           votes = list(popular_books['Num-Ratings'].values),
+                           ratings = list(popular_books['Avg-Rating'].values)
+                           )
+    
 
-st.markdown(page_bg_img, unsafe_allow_html=True)
+@app.route('/recommend')
+def recommend_ui():
+    return render_template('recommend.html')
 
+@app.route('/recommend_books',methods=['post'])
+def recommend():
+    user_input = request.form.get('user_input')
+    index = np.where(pivot_t.index == user_input)[0][0]
+    similar_items = sorted(list(enumerate(similarity_scores[index])), key=lambda x: x[1], reverse=True)[1:5]
 
-st.markdown('# Movie Recommendation System')
-movies = pickle.load(open('movie_list.pkl','rb'))
-similarity = pickle.load(open('similarity.pkl','rb'))
+    data = []
+    for i in similar_items:
+        item = []
+        temp_df = books[books['Book-Title'] == pivot_t.index[i[0]]]
+        item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Title'].values))
+        item.extend(list(temp_df.drop_duplicates('Book-Title')['Book-Author'].values))
+        item.extend(list(temp_df.drop_duplicates('Book-Title')['Image-URL-M'].values))
 
-movie_list = movies['Title'].values
-selected_movie = st.selectbox(
-    "Type or select a movie from the dropdown",
-    movie_list
-)
+        data.append(item)
 
+    print(data)
 
-if st.button('Show Recommendation'):
-    recommended_movie_names = recommend(selected_movie)
-    for i in recommended_movie_names:
-        st.subheader(i)
+    return render_template('recommend.html',data=data)
+
+if __name__ == '__main__':
+    app.run(debug=True)
